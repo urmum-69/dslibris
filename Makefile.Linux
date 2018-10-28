@@ -1,3 +1,4 @@
+EMULATOR		:=	desmume
 # Compact flash image file for emulation.
 CFLASH_IMAGE		:=	cflash.img
 # Path to access mounted emulation image.

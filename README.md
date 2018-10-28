@@ -43,3 +43,18 @@ arm-eabi-gdb, insight-6.8 and desmume-0.9.12-svn5575 have been known to work for
 http://sourceforge.net/projects/ndslibris
 
 ray haleblian
+default-arm7 0.7.4-2
+devkit-env 1.0.1-1
+devkitARM r49-2
+devkitpro-keyring r1.787e015-2
+dstools 1.2.1-1
+dswifi 0.4.2-1
+general-tools 1.0.2-2
+grit 0.8.15-1
+libfat-nds 1.1.3-1
+libfilesystem 0.9.14-1
+libnds 1.7.3-1
+maxmod-nds 1.0.11-2
+mmutil 1.8.7-1
+nds-examples 20180516-2
+ndstool 2.1.2-1

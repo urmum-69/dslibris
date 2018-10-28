@@ -1,146 +1,138 @@
-#
-#
-# dslibris - an ebook reader for the Nintendo DS.
-#
-#  Copyright (C) 2007-2014 Ray Haleblian (ray23@sourceforge.net)
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
-#
-#
-
-#-------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------
 .SUFFIXES:
-#-------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------
+
 ifeq ($(strip $(DEVKITARM)),)
-	$(error "Set DEVKITARM in your environment.")
+$(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM")
 endif
 
 include $(DEVKITARM)/ds_rules
 
-export TARGET		:=	dslibris
-export TOPDIR		:=	$(CURDIR)
+#---------------------------------------------------------------------------------
+# TARGET is the name of the output
+# BUILD is the directory where object files & intermediate files will be placed
+# SOURCES is a list of directories containing source code
+# INCLUDES is a list of directories containing extra header files
+#---------------------------------------------------------------------------------
+TARGET		:=	$(shell basename $(CURDIR))
+BUILD		:=	build
+SOURCES		:=	source data
+DATA		:=	data
+INCLUDES	:=	include tool/build/include tool/build/include/freetype2
+NITRODATA	:=	nitrofiles
 
-#-------------------------------------------------------------------------------
-# path to tools
-#-------------------------------------------------------------------------------
-export PATH			:=	$(DEVKITARM)/bin:$(PATH)
+#---------------------------------------------------------------------------------
+# options for code generation
+#---------------------------------------------------------------------------------
+ARCH	:=	-mthumb -mthumb-interwork
 
-# MEDIATYPE should match a DLDI driver name.
-MEDIATYPE			:=	mpcf
+CFLAGS	:=	-g -Wall -O2 \
+		-fomit-frame-pointer \
+		-ffast-math \
+		$(ARCH)
 
-#-------------------------------------------------------------------------------
-# Device emulation.
-#-------------------------------------------------------------------------------
-# Location of desmume.
-EMULATOR			:=	desmume-cli
+CFLAGS	+=	$(INCLUDE) -DARM9
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
 
-.PHONY: $(TARGET).arm7 $(TARGET).arm9 \
-	browse debug debug7 debug9 dist dldi doc install install-dldi gdb
+ASFLAGS	:=	-g $(ARCH)
+LDFLAGS	=	-specs=ds_arm9.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-#-------------------------------------------------------------------------------
-# main targets
-#-------------------------------------------------------------------------------
-all: $(TARGET).ds.gba
-$(TARGET).ds.gba	: $(TARGET).nds
+#---------------------------------------------------------------------------------
+# any extra libraries we wish to link with the project
+#---------------------------------------------------------------------------------
+LIBS	:=	-lexpat -lz -lfreetype -lfilesystem -lfat -lnds9
 
-#-------------------------------------------------------------------------------
-$(TARGET).nds		: $(TARGET).arm7 $(TARGET).arm9
-	ndstool -b data/icon.bmp \
-	"dslibris;an ebook reader;for the Nintendo DS" \
-	-c $(TARGET).nds -7 arm7/$(TARGET).arm7 -9 arm9/$(TARGET).arm9
+#---------------------------------------------------------------------------------
+# list of directories containing libraries, this must be the top level containing
+# include and lib
+#---------------------------------------------------------------------------------
+LIBDIRS	:=	$(LIBNDS) $(PWD)/tool/build
 
-#-------------------------------------------------------------------------------
-$(TARGET).arm7		: arm7/$(TARGET).elf
-$(TARGET).arm9		: arm9/$(TARGET).elf
+#---------------------------------------------------------------------------------
+# no real need to edit anything past this point unless you need to add additional
+# rules for different file extensions
+#---------------------------------------------------------------------------------
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+# --------------------------------------------------------------------------------
+export TOPDIR	:=	$(CURDIR)
 
-#-------------------------------------------------------------------------------
-arm7/$(TARGET).elf:
-	$(MAKE) -C arm7
+export OUTPUT	:=	$(CURDIR)/$(TARGET)
 
-#-------------------------------------------------------------------------------
-arm9/$(TARGET).elf:
-	$(MAKE) -C arm9
+export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
+			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
 
-#-------------------------------------------------------------------------------
+export DEPSDIR	:=	$(CURDIR)/$(BUILD)
+
+ifneq ($(strip $(NITRODATA)),)
+	export NITRO_FILES	:=	$(CURDIR)/$(NITRODATA)
+endif
+
+CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
+CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
+SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
+BINFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.bin)))
+
+#---------------------------------------------------------------------------------
+# use CXX for linking C++ projects, CC for standard C
+#---------------------------------------------------------------------------------
+ifeq ($(strip $(CPPFILES)),)
+#---------------------------------------------------------------------------------
+	export LD	:=	$(CC)
+#---------------------------------------------------------------------------------
+else
+#---------------------------------------------------------------------------------
+	export LD	:=	$(CXX)
+#---------------------------------------------------------------------------------
+endif
+#---------------------------------------------------------------------------------
+
+export OFILES	:=	$(BINFILES:.bin=.o) \
+			$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
+
+export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
+			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+			-I$(CURDIR)/$(BUILD)
+
+export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+
+.PHONY: $(BUILD) clean
+
+#---------------------------------------------------------------------------------
+$(BUILD):
+	@[ -d $@ ] || mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+
+#---------------------------------------------------------------------------------
 clean:
-	$(MAKE) -C arm9 clean
-	$(MAKE) -C arm7 clean
-	rm -f $(TARGET).ds.gba $(TARGET).nds $(TARGET).$(MEDIATYPE).nds
+	@echo clean ...
+	@rm -fr $(BUILD) $(TARGET).elf $(TARGET).nds
 
-#-------------------------------------------------------------------------------
-# Platform specifics.
-#-------------------------------------------------------------------------------
-include Makefile.$(shell uname)
+#---------------------------------------------------------------------------------
+else
+
+#---------------------------------------------------------------------------------
+# main targets
+#---------------------------------------------------------------------------------
+$(OUTPUT).nds	: 	$(OUTPUT).elf
+$(OUTPUT).nds	: 	$(shell find $(TOPDIR)/$(NITRODATA))
+$(OUTPUT).elf	:	$(OFILES)
+
+#---------------------------------------------------------------------------------
+%.o	:	%.bin
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	$(bin2o)
+
+-include $(DEPSDIR)/*.d
+
+#---------------------------------------------------------------------------------------
+endif
+#---------------------------------------------------------------------------------------
+
+include $(PWD)/Makefile.$(shell uname)
 
 # Run under emulator with an image file.
 # Use desmume 0.9.7+ with DLDI-autopatch.
 test: $(TARGET).nds
-	$(EMULATOR) --preload-rom --cflash-image $(CFLASH_IMAGE) $(TARGET).nds
-
-# Debug under emulation and arm-eabi-insight 6.8.1. Linux only.
-# First, build with 'DEBUG=1 make'
-debug9: $(TARGET).nds
-	arm-eabi-insight arm9/$(TARGET).arm9.elf &
-	$(EMULATOR) --preload-rom --cflash-image $(CFLASH_IMAGE) --arm9gdb=20000 $(TARGET).nds &
-
-debug7: $(TARGET).nds
-	arm-eabi-insight arm7/$(TARGET).arm7.elf &
-	$(EMULATOR) --preload-rom --cflash-image $(CFLASH_IMAGE) --arm7gdb=20001 $(TARGET).nds &
-
-debug:	debug9
-
-# Debug under emulation and arm-eabi-gdb.
-gdb: $(TARGET).nds
-	$(EMULATOR) --preload-rom --cflash-image $(CFLASH_IMAGE) \
-	 --arm9gdb=20000 $(TARGET).nds &
-	sleep 4
-	arm-eabi-gdb -x data/gdb.commands arm9/$(TARGET).arm9.elf
-
-# Make DLDI patched target.
-$(TARGET).$(MEDIATYPE).nds: $(TARGET).nds
-	cp dslibris.nds dslibris.$(MEDIATYPE).nds
-	dlditool data/dldi/$(MEDIATYPE).dldi dslibris.$(MEDIATYPE).nds
-
-dldi: $(TARGET).$(MEDIATYPE).nds
-
-# Copy target to mounted microSD at $(MEDIA_MOUNTPOINT)
-install: $(TARGET).nds
-	cp $(TARGET).nds $(MEDIA_MOUNTPOINT)
-	sync
-
-# Installation as above, including DLDI patching.
-install-dldi: $(TARGET).$(MEDIATYPE).nds
-	cp $(TARGET).$(MEDIATYPE).nds $(MEDIA_MOUNTPOINT)/$(TARGET).nds
-	sync
-
-doc: Doxyfile
-	doxygen
-
-browse: doc
-	firefox doc/html/index.html
-
-# Make an archive to release on Sourceforge.
-dist/$(TARGET).zip: $(TARGET).nds INSTALL.txt
-	- mkdir dist
-	- rm -r dist/*
-	cp INSTALL.txt $(TARGET).nds data/$(TARGET).xml dist
-	- mkdir dist/font
-	cp data/font/*.ttf dist/font
-	- mkdir dist/book	
-	cp data/book/dslibris.xht dist/book
-	(cd dist; zip -r $(TARGET).zip *)
-
-dist: dist/$(TARGET).zip
+	$(EMULATOR) --cflash-image $(CFLASH_IMAGE) $(TARGET).nds
 
